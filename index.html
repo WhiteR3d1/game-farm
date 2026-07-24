@@ -423,7 +423,7 @@
 
         <!-- Bottom Bar -->
         <div id="bottom-bar">
-            <span>⌨️ <strong style="color: #f1c40f;">WASD</strong> เดิน</span> | <span>🤖 ตอบคำถามหุ่นยนต์ฝั่งขวา เพื่อ <strong style="color: #3498db;">เติมน้ำเต็มถัง 100 💧</strong></span>
+            <span>⌨️ <strong style="color: #f1c40f;">WASD</strong> เดิน</span> | <span>🪣 คลิก<strong style="color: #3498db;">บ่อน้ำ</strong>ตอบคำถามเพื่อเติมน้ำ</span> | <span>🏠 คลิก<strong style="color: #f39c12;">บ้าน</strong>เพื่อข้ามไปตอนเช้า</span>
         </div>
     </div>
 
@@ -440,7 +440,7 @@
 
     <!-- 2D Dynamic Badges -->
     <div id="robot-badge" class="game-badge" onclick="openRobotQuiz()">
-        QUIZ 🤖
+        QUIZ 🪣
     </div>
 
     <!-- Tier 2 Island Badges -->
@@ -560,6 +560,8 @@
                 playDurationSeconds: totalPlaySeconds,
                 timestamp: new Date().toISOString()
             });
+            // ต้องลบ session ที่จำไว้ ไม่งั้นตอน reload จะ auto login กลับเข้ามาทันที
+            localStorage.removeItem('minifarm_user');
             currentUser = null;
             location.reload();
         }
@@ -720,6 +722,38 @@
             avocado:    { name: 'อะโวคาโด', icon: '🥑', cost: 10000, sell: 95000,  growTime: 45, exp: 5000,minLevel: 20 }
         };
 
+        /* --- GAME STATE & PLOTS (กู้คืน) ---------------------------------------
+           หมายเหตุสำคัญ: เดิมก้อนประกาศ `state` และ `plotsData` หายไปจากไฟล์
+           ทำให้โค้ดอ้างถึงตัวแปรที่ไม่เคยถูกสร้าง init() จึงพังที่ createPlots()
+           (ReferenceError: plotsData is not defined) ก่อนถึง animate() = จอดำ
+           ค่าปรับสมดุลเกมของเกาะ (minLevel / cost / duration) ปรับได้ตามต้องการ */
+        let plotsData = [];
+
+        const state = {
+            coins: 100,
+            water: 100,
+            maxWater: 100,
+            level: 1,
+            exp: 0,
+            maxExp: 50,
+            unlockedMainPlots: 6,
+            houseLevel: 1,
+            hasDog: false,
+            hasCat: false,
+            selectedSeed: 'tomato',
+            currentQuizAnswer: null,
+            catTimer: 0,
+            waterBuffTimer: 0,
+            robotBrokenTimer: 0,
+            // คลังผลผลิต: เริ่มต้นทุกชนิดพืช = 0 ชิ้น
+            inventory: Object.fromEntries(Object.keys(CROP_TYPES).map(k => [k, 0])),
+            // เกาะเสริม: state = 'locked' | 'unlocking' | 'unlocked'
+            eastIsland:      { name: 'เกาะตะวันออก',            state: 'locked', timer: 0, plots: [], minLevel: 3,  cost: 500,  duration: 8 },
+            westIsland:      { name: 'เกาะตะวันตก',            state: 'locked', timer: 0, plots: [], minLevel: 5,  cost: 1200, duration: 12 },
+            outerEastIsland: { name: 'เกาะอุลตร้าตะวันออกไกล', state: 'locked', timer: 0, plots: [], minLevel: 10, cost: 2500, duration: 20 },
+            outerWestIsland: { name: 'เกาะคอสโม่ตะวันตกไกล',   state: 'locked', timer: 0, plots: [], minLevel: 15, cost: 5000, duration: 30 }
+        };
+
         /* =========================================================================
            4. THREE.JS SCENE SETUP
            ========================================================================= */
@@ -732,12 +766,27 @@
         camera.position.set(0, 24, 30);
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         renderer.outputEncoding = THREE.sRGBEncoding;
         container.appendChild(renderer.domElement);
+
+        // ปรับขนาด canvas ให้ตรงกับ container เสมอ + กันกรณี window ขนาด 0 ตอนโหลด
+        // (เดิม setSize ถูกเรียกครั้งเดียวตอนโหลด ถ้าตอนนั้น innerWidth=0 canvas จะเป็น 0x0 = จอดำ)
+        function resizeRenderer() {
+            const w = container.clientWidth || window.innerWidth || document.documentElement.clientWidth;
+            const h = container.clientHeight || window.innerHeight || document.documentElement.clientHeight;
+            if (!w || !h) return; // ยังไม่มีขนาดจริง รอรอบถัดไป
+            camera.aspect = w / h;
+            camera.updateProjectionMatrix();
+            renderer.setSize(w, h, false);
+            renderer.domElement.style.width = w + 'px';
+            renderer.domElement.style.height = h + 'px';
+        }
+        resizeRenderer();
+        // container ได้ขนาดจริงเมื่อไหร่ (หรือหน้าจอเปลี่ยนขนาด) ให้ปรับตาม
+        if (window.ResizeObserver) { new ResizeObserver(resizeRenderer).observe(container); }
 
         const controls = new THREE.OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true; controls.dampingFactor = 0.05;
@@ -984,20 +1033,8 @@
 
             waterWellGroup.position.set(-6.5, 0, -2.0); scene.add(waterWellGroup);
 
-            // Robot 3D Mesh on the Right Side of plots!
-            robotGroup = new THREE.Group();
-            const bodyMat = new THREE.MeshLambertMaterial({ color: 0xc8d6e5, flatShading: true });
-            const blueMat = new THREE.MeshLambertMaterial({ color: 0x2e86de, flatShading: true });
-            const eyeMat = new THREE.MeshBasicMaterial({ color: 0xf1c40f });
-
-            robotGroup.add(new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 1.2, 12), bodyMat));
-            const head = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.7, 0.7), bodyMat); head.position.y = 0.95; robotGroup.add(head);
-            const eye1 = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), eyeMat); eye1.position.set(-0.2, 1.0, 0.36);
-            const eye2 = eye1.clone(); eye2.position.set(0.2, 1.0, 0.36); robotGroup.add(eye1, eye2);
-            const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.4), blueMat); ant.position.y = 1.5; robotGroup.add(ant);
-
-            // MOVED TO RIGHT SIDE!
-            robotGroup.position.set(6.5, 0.6, 1.5); scene.add(robotGroup);
+            // เอาหุ่นยนต์ออก — ย้ายกลไกตอบคำถามเติมน้ำไปที่บ่อน้ำแทน
+            robotGroup = null;
         }
 
         /* =========================================================================
@@ -1205,7 +1242,7 @@
             const robotBadge = document.getElementById('robot-badge');
             if (state.robotBrokenTimer > 0) { robotBadge.className = 'game-badge broken'; robotBadge.innerText = `พัง! (${Math.ceil(state.robotBrokenTimer)}s)`; }
             else if (state.waterBuffTimer > 0) { robotBadge.className = 'game-badge watering'; robotBadge.innerText = `รดน้ำ 💦 (${Math.ceil(state.waterBuffTimer)}s)`; }
-            else { robotBadge.className = 'game-badge'; robotBadge.innerText = 'QUIZ 🤖'; }
+            else { robotBadge.className = 'game-badge'; robotBadge.innerText = 'QUIZ 🪣'; }
 
             updateIslandBadge('east-island-badge', state.eastIsland, '🔓 ปลดล็อคเกาะตะวันออก (500 🪙)');
             updateIslandBadge('west-island-badge', state.westIsland, '🔓 ปลดล็อคเกาะตะวันตก (1200 🪙)');
@@ -1277,7 +1314,7 @@
                 return;
             }
             if (state.water < 10 && state.waterBuffTimer <= 0) {
-                playSound('wrong'); showFloatingText('💧 น้ำหมด! ตอบคำถามหุ่นยนต์เพื่อเติมน้ำ', event.clientX, event.clientY, '#3498db');
+                playSound('wrong'); showFloatingText('💧 น้ำหมด! คลิกบ่อน้ำตอบคำถามเพื่อเติมน้ำ', event.clientX, event.clientY, '#3498db');
                 return;
             }
 
@@ -1429,8 +1466,14 @@
             mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
             raycaster.setFromCamera(mouse, camera);
 
-            if (robotGroup && raycaster.intersectObjects(robotGroup.children, true).length > 0) {
+            // คลิกบ่อน้ำ -> เปิดคำถามเติมน้ำ
+            if (waterWellGroup && raycaster.intersectObjects(waterWellGroup.children, true).length > 0) {
                 openRobotQuiz(); return;
+            }
+
+            // คลิกบ้าน -> เข้าบ้านพักผ่อน เปลี่ยนเป็นตอนเช้า
+            if (houseGroup && raycaster.intersectObjects(houseGroup.children, true).length > 0) {
+                enterHouseMorning(); return;
             }
 
             const activePlotMeshes = plotsData.filter(p => p.unlocked).map(p => p.dirtMesh);
@@ -1450,14 +1493,26 @@
         const clock = new THREE.Clock();
         let smokeEmitTimer = 0;
 
+        // วงจรกลางวัน-กลางคืน: ยิ่งค่าน้อยยิ่งช้า (เดิม 0.1 = เร็วมาก ~63 วิ/รอบ, ตอนนี้ ~3.5 นาที/รอบ)
+        const DAY_NIGHT_SPEED = 0.03;
+        // ใช้เลื่อนเฟสเวลา เพื่อสั่งให้ "เข้าบ้าน = เปลี่ยนเป็นตอนเช้า" ได้
+        let dayTimeOffset = 0;
+
+        // เข้าบ้าน -> ข้ามไปเป็นตอนเช้า/กลางวันทันที
+        function enterHouseMorning() {
+            dayTimeOffset = (Math.PI / 2) - clock.getElapsedTime() * DAY_NIGHT_SPEED;
+            playSound('levelup');
+            showFloatingText('🌅 เข้าบ้านพักผ่อน... ตื่นมาเป็นตอนเช้าแล้ว!', window.innerWidth / 2, window.innerHeight / 2, '#f39c12');
+        }
+
         function project3DTo2D(pos3D) {
             const tempV = pos3D.clone(); tempV.project(camera);
             return { x: (tempV.x * .5 + .5) * window.innerWidth, y: (-(tempV.y * .5) + .5) * window.innerHeight };
         }
 
         function updateBadgesPositions() {
-            if (robotGroup) {
-                const pos = project3DTo2D(robotGroup.position.clone().add(new THREE.Vector3(0, 2.8, 0)));
+            if (waterWellGroup) {
+                const pos = project3DTo2D(waterWellGroup.position.clone().add(new THREE.Vector3(0, 3.4, 0)));
                 const b = document.getElementById('robot-badge');
                 if (b) { b.style.left = `${pos.x}px`; b.style.top = `${pos.y}px`; }
             }
@@ -1488,7 +1543,8 @@
             try {
                 const delta = clock.getDelta(); const time = clock.getElapsedTime();
 
-                const dayFactor = (Math.sin(time * 0.1) + 1) / 2;
+                const dayFactor = (Math.sin(time * DAY_NIGHT_SPEED + dayTimeOffset) + 1) / 2;
+                const isNight = dayFactor <= 0.3; // กลางคืน = พืชหยุดโต
                 const dayColor = new THREE.Color(0x87ceeb);
                 const nightColor = new THREE.Color(0x0f172a);
                 scene.background.lerpColors(nightColor, dayColor, dayFactor);
@@ -1551,7 +1607,8 @@
                 const speedMultiplier = state.waterBuffTimer > 0 ? 1.5 : 1.0;
                 plotsData.forEach(plot => {
                     if (plot.state === 'growing') {
-                        plot.growProgress += delta * speedMultiplier;
+                        // กลางคืนพืชไม่โต (ต้องรอกลางวัน หรือเข้าบ้านเพื่อข้ามไปตอนเช้า)
+                        if (!isNight) plot.growProgress += delta * speedMultiplier;
                         const pct = Math.min(plot.growProgress / plot.growDuration, 1.0);
 
                         plot.fillBarMesh.scale.x = pct;
@@ -1605,12 +1662,12 @@
                 loadSavedGame(savedUser);
             }
 
-            window.addEventListener('resize', () => {
-                camera.aspect = window.innerWidth / window.innerHeight;
-                camera.updateProjectionMatrix();
-                renderer.setSize(window.innerWidth, window.innerHeight);
-            });
+            window.addEventListener('resize', resizeRenderer);
+            window.addEventListener('load', resizeRenderer);
+            // เผื่อ container เพิ่งได้ขนาดหลังเฟรมแรก บังคับปรับอีกครั้ง
+            requestAnimationFrame(resizeRenderer);
 
+            resizeRenderer();
             animate();
         }
 

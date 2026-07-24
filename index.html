@@ -1,0 +1,1620 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mini Farm Island 3D</title>
+    <!-- Google Fonts: Kanit -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Three.js, OrbitControls, Tone.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+            font-family: 'Kanit', sans-serif;
+        }
+
+        body, html {
+            width: 100%; height: 100%;
+            overflow: hidden; background-color: #55aaff;
+        }
+
+        #canvas-container {
+            width: 100%; height: 100%;
+            position: absolute; top: 0; left: 0; z-index: 1;
+        }
+
+        /* Glassmorphism UI Style */
+        .glass-card {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.6);
+            border-radius: 20px;
+            box-shadow: 0 12px 32px 0 rgba(31, 38, 135, 0.15);
+        }
+
+        /* UI Overlay */
+        #ui-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 10; pointer-events: none;
+            display: flex; flex-direction: column; justify-content: space-between;
+            padding: 16px;
+        }
+
+        .interactive { pointer-events: auto; }
+
+        /* Left Stats Panel */
+        #left-panel {
+            width: 320px;
+            padding: 16px;
+            display: flex; flex-direction: column; gap: 10px;
+        }
+
+        .game-title {
+            font-size: 1.2rem; font-weight: 700; color: #2c3e50;
+            display: flex; align-items: center; justify-content: space-between;
+        }
+
+        .user-box {
+            display: flex; align-items: center; justify-content: space-between;
+            background: rgba(46, 204, 113, 0.15); border: 1px solid rgba(46, 204, 113, 0.4);
+            padding: 6px 12px; border-radius: 12px; font-size: 0.8rem; font-weight: 600; color: #27ae60;
+        }
+
+        .btn-user-action {
+            padding: 3px 8px; border: none; border-radius: 6px;
+            background: #27ae60; color: white; font-weight: 700; font-size: 0.72rem; cursor: pointer;
+        }
+        .btn-user-action.logout { background: #ee5253; }
+
+        .stat-item {
+            display: flex; align-items: center; gap: 10px;
+            background: rgba(255, 255, 255, 0.55); padding: 8px 12px; border-radius: 14px;
+        }
+
+        .stat-icon { font-size: 1.4rem; }
+        .stat-info { display: flex; flex-direction: column; width: 100%; }
+        .stat-label { font-size: 0.72rem; color: #666; font-weight: 400; }
+        .stat-value { font-size: 1.05rem; font-weight: 700; color: #1e272e; }
+
+        /* Level & EXP Progress Bar */
+        .exp-bar-bg { width: 100%; height: 8px; background: rgba(0, 0, 0, 0.15); border-radius: 6px; margin-top: 3px; overflow: hidden; }
+        .exp-bar-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #f1c40f, #f39c12); border-radius: 6px; transition: width 0.3s ease; }
+
+        /* Water Progress Bar */
+        .water-bar-bg { width: 100%; height: 8px; background: rgba(0, 0, 0, 0.15); border-radius: 6px; margin-top: 3px; overflow: hidden; }
+        .water-bar-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #3498db, #00d2d3); border-radius: 6px; transition: width 0.3s ease; }
+
+        .btn-sell {
+            width: 100%; padding: 10px; border: none; border-radius: 14px;
+            background: linear-gradient(135deg, #f1c40f, #f39c12); color: #fff;
+            font-size: 0.95rem; font-weight: 700; cursor: pointer;
+            box-shadow: 0 4px 15px rgba(243, 156, 18, 0.4); transition: all 0.2s ease;
+            text-align: center; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+        }
+        .btn-sell:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(243, 156, 18, 0.6); }
+        .btn-sell:disabled { background: #dcdde1; box-shadow: none; cursor: not-allowed; color: #888; }
+
+        .inventory-list {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px;
+            background: rgba(255,255,255,0.45); padding: 8px 10px; border-radius: 12px;
+            font-size: 0.75rem; color: #333; max-height: 120px; overflow-y: auto;
+        }
+
+        /* Right Shop Panel */
+        #right-panel {
+            position: absolute; top: 16px; right: 16px;
+            width: 360px; padding: 16px;
+        }
+
+        .shop-tabs {
+            display: flex; gap: 8px; margin-bottom: 12px;
+            border-bottom: 2px solid rgba(0, 0, 0, 0.05); padding-bottom: 8px;
+        }
+
+        .shop-tab {
+            flex: 1; padding: 8px; border: none; background: transparent;
+            font-size: 0.88rem; font-weight: 600; color: #718093; cursor: pointer;
+            border-radius: 10px; transition: all 0.2s;
+            display: flex; align-items: center; justify-content: center; gap: 4px;
+        }
+
+        .shop-tab.active { background: rgba(46, 204, 113, 0.2); color: #27ae60; }
+
+        .shop-content {
+            display: flex; flex-direction: column; gap: 8px;
+            max-height: 460px; overflow-y: auto; padding-right: 4px;
+        }
+
+        .seed-card, .build-card {
+            display: flex; align-items: center; justify-content: space-between;
+            background: rgba(255, 255, 255, 0.65); border: 2px solid transparent;
+            padding: 8px 12px; border-radius: 14px; cursor: pointer; transition: all 0.2s ease;
+        }
+        .seed-card:hover, .build-card:hover { background: rgba(255, 255, 255, 0.95); transform: scale(1.02); }
+        .seed-card.selected { border-color: #2ecc71; background: rgba(46, 204, 113, 0.18); }
+        .seed-card.locked-item, .build-card.locked-item { opacity: 0.6; cursor: not-allowed; }
+
+        .item-left { display: flex; flex-direction: column; }
+        .item-name { font-size: 0.88rem; font-weight: 700; color: #2c3e50; display: flex; align-items: center; gap: 6px; }
+        .item-sub { font-size: 0.72rem; color: #e67e22; font-weight: 600; }
+        .item-right { display: flex; flex-direction: column; align-items: flex-end; }
+        .item-sell { font-size: 0.8rem; color: #27ae60; font-weight: 700; }
+        .item-time { font-size: 0.7rem; color: #7f8c8d; }
+
+        .btn-buy {
+            padding: 6px 12px; border: none; border-radius: 10px;
+            background: linear-gradient(135deg, #e74c3c, #c0392b); color: white;
+            font-weight: 700; font-size: 0.82rem; cursor: pointer;
+            box-shadow: 0 3px 10px rgba(231, 76, 60, 0.3); transition: all 0.2s;
+        }
+        .btn-buy:hover:not(:disabled) { transform: translateY(-2px); }
+        .btn-buy:disabled { background: #b2bec3; box-shadow: none; cursor: not-allowed; }
+
+        /* Bottom Bar */
+        #bottom-bar {
+            align-self: center; padding: 10px 24px; font-size: 0.82rem; font-weight: 600;
+            color: #2c3e50; display: flex; gap: 12px; align-items: center;
+            border-radius: 30px; background: rgba(0, 0, 0, 0.75); color: #fff;
+            backdrop-filter: blur(8px); box-shadow: 0 8px 20px rgba(0,0,0,0.25);
+        }
+        #bottom-bar span.highlight { color: #f1c40f; }
+
+        /* Dynamic 2D Badges */
+        .game-badge {
+            position: absolute; pointer-events: auto; transform: translate(-50%, -100%);
+            background: #ff9f43; color: #fff; padding: 6px 12px; border-radius: 14px;
+            font-weight: 700; font-size: 0.82rem; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            border: 2px solid #fff; cursor: pointer; transition: transform 0.2s ease, background-color 0.3s ease;
+            display: flex; align-items: center; gap: 6px; white-space: nowrap;
+        }
+        .game-badge:hover { transform: translate(-50%, -110%) scale(1.08); }
+        .game-badge.watering { background: #2e86de; }
+        .game-badge.broken { background: #ee5253; animation: pulse-red 0.6s infinite alternate; }
+        .game-badge.island-unlock { background: linear-gradient(135deg, #10ac84, #1dd1a1); }
+        .game-badge.island-unlock-outer { background: linear-gradient(135deg, #8e44ad, #9b59b6); }
+        .game-badge.island-unlocking { background: #ff9f43; }
+
+        @keyframes pulse-red {
+            0% { transform: translate(-50%, -100%) scale(1); }
+            100% { transform: translate(-50%, -100%) scale(1.08); }
+        }
+
+        /* Modal Auth (Login / Register) */
+        #auth-modal {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(8px);
+            z-index: 200; display: flex; align-items: center; justify-content: center;
+            pointer-events: auto;
+        }
+
+        #auth-card {
+            width: 360px; padding: 28px; text-align: center;
+            display: flex; flex-direction: column; gap: 14px;
+            background: #ffffff; border-radius: 24px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+        }
+
+        .auth-title { font-size: 1.4rem; font-weight: 700; color: #2c3e50; }
+        .auth-input {
+            width: 100%; padding: 12px 14px; border: 2px solid #dfe4ea;
+            border-radius: 12px; font-size: 0.95rem; outline: none; transition: all 0.2s;
+        }
+        .auth-input:focus { border-color: #2ecc71; }
+
+        .btn-auth-primary {
+            width: 100%; padding: 12px; border: none; border-radius: 12px;
+            background: linear-gradient(135deg, #2ecc71, #27ae60); color: white;
+            font-size: 1rem; font-weight: 700; cursor: pointer; transition: all 0.2s;
+        }
+        .btn-auth-primary:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(46, 204, 113, 0.4); }
+
+        .btn-auth-switch {
+            background: transparent; border: none; color: #3498db; font-weight: 600; font-size: 0.85rem; cursor: pointer;
+        }
+
+        /* Modal Math Quiz */
+        #quiz-modal {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.4); backdrop-filter: blur(6px);
+            z-index: 100; display: none; align-items: center; justify-content: center;
+            pointer-events: auto;
+        }
+
+        #quiz-card {
+            width: 360px; padding: 24px; text-align: center;
+            display: flex; flex-direction: column; gap: 16px;
+            background: #ffffff; border-radius: 24px;
+        }
+
+        .quiz-header { font-size: 1.2rem; font-weight: 700; color: #2e86de; display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .quiz-sub { font-size: 0.8rem; color: #7f8c8d; margin-top: -10px; }
+        .quiz-question { background: #f1f2f6; padding: 16px; border-radius: 16px; font-size: 1.8rem; font-weight: 700; color: #2c3e50; letter-spacing: 2px; }
+        .quiz-options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .btn-opt { padding: 14px; border: none; background: #3498db; color: white; border-radius: 14px; font-size: 1.1rem; font-weight: 700; cursor: pointer; transition: all 0.15s; }
+        .btn-opt:hover { background: #2980b9; transform: translateY(-2px); }
+        .btn-close-modal { padding: 8px; background: #ee5253; color: white; border: none; border-radius: 10px; font-weight: 600; cursor: pointer; margin-top: 4px; }
+
+        /* Floating Text Effects */
+        .float-text {
+            position: absolute; pointer-events: none; font-weight: 700; font-size: 1.2rem;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5); animation: floatUpFade 1.2s forwards ease-out; z-index: 99;
+        }
+
+        @keyframes floatUpFade {
+            0% { transform: translate(-50%, 0) scale(0.8); opacity: 1; }
+            50% { transform: translate(-50%, -30px) scale(1.1); opacity: 1; }
+            100% { transform: translate(-50%, -60px) scale(1); opacity: 0; }
+        }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 10px; }
+    </style>
+</head>
+<body>
+
+    <div id="canvas-container"></div>
+
+    <!-- UI Overlay Layer -->
+    <div id="ui-layer">
+        <!-- Left Panel: Level, Money, Water & Inventory -->
+        <div id="left-panel" class="glass-card interactive">
+            <div class="game-title">
+                <span>🌾 Mini Farm 3D</span>
+                <span id="time-badge" style="font-size: 0.85rem; font-weight: 600; color: #f39c12;">☀️ กลางวัน</span>
+            </div>
+
+            <!-- USER LOGIN & SESSION TIME BOX -->
+            <div class="user-box" id="user-box">
+                <div>
+                    <div>👤 <span id="txt-username">Guest</span></div>
+                    <div style="font-size: 0.7rem; color: #666;">⏱️ เวลาในเกม: <strong id="txt-session-time">00:00</strong></div>
+                </div>
+                <div style="display: flex; gap: 4px;">
+                    <button class="btn-user-action" onclick="saveGame(true)">💾 เซฟ</button>
+                    <button class="btn-user-action logout" onclick="logoutUser()">🚪 ออก</button>
+                </div>
+            </div>
+
+            <!-- LEVEL & EXP BAR -->
+            <div class="stat-item">
+                <div class="stat-icon">⭐</div>
+                <div class="stat-info">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span class="stat-label">ระดับเลเวล</span>
+                        <span id="txt-level" style="font-size: 0.85rem; font-weight: 700; color: #f39c12;">เลเวล 1</span>
+                    </div>
+                    <div class="exp-bar-bg">
+                        <div id="exp-bar-fill" class="exp-bar-fill"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="stat-item">
+                <div class="stat-icon">🪙</div>
+                <div class="stat-info">
+                    <span class="stat-label">เงินสะสม</span>
+                    <span id="txt-coins" class="stat-value">100 เหรียญ</span>
+                </div>
+            </div>
+
+            <!-- WATER TANK METER (Refill solely via Robot Quiz) -->
+            <div class="stat-item">
+                <div class="stat-icon">💧</div>
+                <div class="stat-info">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span class="stat-label">น้ำในถัง (ตอบควิซเพื่อเติม)</span>
+                        <span id="txt-water" style="font-size: 0.8rem; font-weight: 700; color: #2980b9;">100 / 100</span>
+                    </div>
+                    <div class="water-bar-bg">
+                        <div id="water-bar-fill" class="water-bar-fill"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="stat-item">
+                <div class="stat-icon">📦</div>
+                <div class="stat-info">
+                    <span class="stat-label">ผลผลิตในคลัง</span>
+                    <span id="txt-storage" class="stat-value">0 ชิ้น</span>
+                </div>
+            </div>
+            
+            <div class="inventory-list" id="inv-container">
+                <!-- Dynamic Inventory Items -->
+            </div>
+
+            <button id="btn-sell-all" class="btn-sell" onclick="sellAllCrops()">ขายผลผลิตทั้งหมด</button>
+        </div>
+
+        <!-- Right Panel: Shop & Upgrades -->
+        <div id="right-panel" class="glass-card interactive">
+            <div class="shop-tabs">
+                <button class="shop-tab active" id="tab-seeds" onclick="switchTab('seeds')">🌱 เมล็ดพันธุ์</button>
+                <button class="shop-tab" id="tab-build" onclick="switchTab('build')">🔨 ก่อสร้าง & เกาะ</button>
+            </div>
+
+            <!-- Seed Tab Content (10 Crop Varieties) -->
+            <div id="content-seeds" class="shop-content">
+                <!-- Seed list injected dynamically -->
+            </div>
+
+            <!-- Build Tab Content (Upgrades + Islands + Helper Pets) -->
+            <div id="content-build" class="shop-content" style="display: none;">
+                <!-- Main Island Plots -->
+                <div class="build-card">
+                    <div class="item-left">
+                        <span class="item-name">ขยายแปลงเกาะหลัก 🪵</span>
+                        <span class="item-sub" id="txt-plot-count">(6/8 ช่อง)</span>
+                    </div>
+                    <button class="btn-buy" id="btn-expand-plot" onclick="buyPlotExpansion()">-150 🪙</button>
+                </div>
+
+                <div class="build-card">
+                    <div class="item-left">
+                        <span class="item-name">ต่อเติมบ้าน 🏠</span>
+                        <span class="item-sub" id="txt-house-level">ระดับ 1 -> 2</span>
+                    </div>
+                    <button class="btn-buy" id="btn-upgrade-house" onclick="buyHouseUpgrade()">-300 🪙</button>
+                </div>
+
+                <!-- Island Unlocks in Shop UI -->
+                <div class="build-card" id="card-island-east">
+                    <div class="item-left">
+                        <span class="item-name">🔓 เกาะตะวันออก (x2🔥)</span>
+                        <span class="item-sub" id="txt-req-east">ต้องเลเวล 5</span>
+                    </div>
+                    <button class="btn-buy" id="btn-unlock-east" onclick="startUnlockIsland('eastIsland')">-500 🪙</button>
+                </div>
+
+                <div class="build-card" id="card-island-west">
+                    <div class="item-left">
+                        <span class="item-name">🔓 เกาะตะวันตก (x3🔥)</span>
+                        <span class="item-sub" id="txt-req-west">ต้องเลเวล 10</span>
+                    </div>
+                    <button class="btn-buy" id="btn-unlock-west" onclick="startUnlockIsland('westIsland')">-1,200 🪙</button>
+                </div>
+
+                <div class="build-card" id="card-island-outer-east">
+                    <div class="item-left">
+                        <span class="item-name">🔓 เกาะตะวันออกไกล (x4🌟)</span>
+                        <span class="item-sub" id="txt-req-outer-east">ต้องเลเวล 15</span>
+                    </div>
+                    <button class="btn-buy" id="btn-unlock-outer-east" onclick="startUnlockIsland('outerEastIsland')">-2,500 🪙</button>
+                </div>
+
+                <div class="build-card" id="card-island-outer-west">
+                    <div class="item-left">
+                        <span class="item-name">🔓 เกาะตะวันตกไกล (x5👑)</span>
+                        <span class="item-sub" id="txt-req-outer-west">ต้องเลเวล 20</span>
+                    </div>
+                    <button class="btn-buy" id="btn-unlock-outer-west" onclick="startUnlockIsland('outerWestIsland')">-5,000 🪙</button>
+                </div>
+
+                <!-- Helper Pets -->
+                <div class="build-card">
+                    <div class="item-left">
+                        <span class="item-name">🐶 น้องหมาช่วยเก็บผัก</span>
+                        <span class="item-sub">ช่วยเก็บผักสุกเข้าคลังอัตโนมัติ</span>
+                    </div>
+                    <button class="btn-buy" id="btn-buy-dog" onclick="buyPet('dog')">-800 🪙</button>
+                </div>
+
+                <div class="build-card">
+                    <div class="item-left">
+                        <span class="item-name">🐱 น้องแมวกวักโชค</span>
+                        <span class="item-sub">ให้เงินโบนัสอัตโนมัติทุก 10 วิ</span>
+                    </div>
+                    <button class="btn-buy" id="btn-buy-cat" onclick="buyPet('cat')">-1,500 🪙</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Bar -->
+        <div id="bottom-bar">
+            <span>⌨️ <strong style="color: #f1c40f;">WASD</strong> เดิน</span> | <span>🤖 ตอบคำถามหุ่นยนต์ฝั่งขวา เพื่อ <strong style="color: #3498db;">เติมน้ำเต็มถัง 100 💧</strong></span>
+        </div>
+    </div>
+
+    <!-- Auth Modal (Login / Register) -->
+    <div id="auth-modal">
+        <div id="auth-card" class="glass-card">
+            <div class="auth-title" id="auth-title">🌾 เข้าสู่ระบบ Mini Farm 3D</div>
+            <input type="text" id="auth-user" class="auth-input" placeholder="ชื่อผู้ใช้งาน (Username)" autocomplete="off">
+            <input type="password" id="auth-pass" class="auth-input" placeholder="รหัสผ่าน (Password)">
+            <button class="btn-auth-primary" id="btn-auth-submit" onclick="submitAuth()">เข้าสู่ระบบ / บันทึกข้อมูล</button>
+            <button class="btn-auth-switch" id="btn-auth-toggle" onclick="toggleAuthMode()">ยังไม่มีบัญชี? สมัครสมาชิกใหม่</button>
+        </div>
+    </div>
+
+    <!-- 2D Dynamic Badges -->
+    <div id="robot-badge" class="game-badge" onclick="openRobotQuiz()">
+        QUIZ 🤖
+    </div>
+
+    <!-- Tier 2 Island Badges -->
+    <div id="east-island-badge" class="game-badge island-unlock" onclick="startUnlockIsland('eastIsland')">
+        🔓 ปลดล็อคเกาะพรีเมียมตะวันออก (500 🪙)
+    </div>
+
+    <div id="west-island-badge" class="game-badge island-unlock" onclick="startUnlockIsland('westIsland')">
+        🔓 ปลดล็อคเกาะมาสเตอร์ตะวันตก (1200 🪙)
+    </div>
+
+    <!-- Tier 3 Outer Island Badges -->
+    <div id="outer-east-badge" class="game-badge island-unlock-outer" onclick="startUnlockIsland('outerEastIsland')">
+        🔓 ปลดล็อคเกาะอุลตร้าตะวันออกไกล (2500 🪙)
+    </div>
+
+    <div id="outer-west-badge" class="game-badge island-unlock-outer" onclick="startUnlockIsland('outerWestIsland')">
+        🔓 ปลดล็อคเกาะคอสโม่ตะวันตกไกล (5000 🪙)
+    </div>
+
+    <!-- Math Quiz Modal -->
+    <div id="quiz-modal">
+        <div id="quiz-card" class="glass-card">
+            <div class="quiz-header">🤖 หุ่นยนต์ช่วยรดน้ำ</div>
+            <div class="quiz-sub">ตอบคำถามถูกรับบัฟโตไว 1.5x + น้ำเต็มถัง 100/100!</div>
+            <div id="quiz-q" class="quiz-question">12 + 15 = ?</div>
+            <div class="quiz-options" id="quiz-opts">
+                <button class="btn-opt" onclick="answerQuiz(0)">27</button>
+                <button class="btn-opt" onclick="answerQuiz(1)">30</button>
+                <button class="btn-opt" onclick="answerQuiz(2)">25</button>
+                <button class="btn-opt" onclick="answerQuiz(3)">22</button>
+            </div>
+            <button class="btn-close-modal" onclick="closeQuiz()">ปิดหน้าต่าง</button>
+        </div>
+    </div>
+
+    <script>
+        /* =========================================================================
+           1. GOOGLE APPS SCRIPT SYNC CONFIG & DATA LOGGING
+           ========================================================================= */
+        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxY6u0GYjr8wTofRSL081j9nVVHOlfymmcSyU_mwEmjTwc-rj5LSXl4jtdZGlu6x4a-/exec';
+        
+        let currentUser = null;
+        let isRegisterMode = false;
+        let sessionStartTime = Date.now();
+        let totalPlaySeconds = 0;
+
+        function toggleAuthMode() {
+            isRegisterMode = !isRegisterMode;
+            document.getElementById('auth-title').innerText = isRegisterMode ? '✨ สมัครสมาชิก Mini Farm 3D' : '🌾 เข้าสู่ระบบ Mini Farm 3D';
+            document.getElementById('btn-auth-submit').innerText = isRegisterMode ? 'สมัครสมาชิก' : 'เข้าสู่ระบบ';
+            document.getElementById('btn-auth-toggle').innerText = isRegisterMode ? 'มีบัญชีอยู่แล้ว? เข้าสู่ระบบ' : 'ยังไม่มีบัญชี? สมัครสมาชิกใหม่';
+        }
+
+        async function postToAppsScript(payload) {
+            try {
+                // Send payload as form urlencoded data for max compatibility with Apps Script
+                const bodyParams = new URLSearchParams();
+                bodyParams.append('data', JSON.stringify(payload));
+                bodyParams.append('action', payload.action || '');
+                bodyParams.append('username', payload.username || '');
+
+                // ยิงทางเดียวเพื่อไม่ให้เกิดข้อมูลซ้ำในชีต:
+                // sendBeacon เชื่อถือได้ทั้งตอนเล่นปกติและตอนปิดแท็บ (beforeunload) จึงใช้เป็นหลัก
+                // ถ้าเบราว์เซอร์ไม่รองรับค่อย fallback ไป fetch(no-cors)
+                if (navigator.sendBeacon) {
+                    navigator.sendBeacon(APPS_SCRIPT_URL, bodyParams);
+                } else {
+                    fetch(APPS_SCRIPT_URL, {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: bodyParams.toString()
+                    }).catch(() => {});
+                }
+                return true;
+            } catch(e) {
+                console.error("Apps Script Error:", e);
+                return false;
+            }
+        }
+
+        async function submitAuth() {
+            const user = document.getElementById('auth-user').value.trim();
+            const pass = document.getElementById('auth-pass').value.trim();
+            if (!user || !pass) {
+                alert('กรุณากรอกชื่อผู้ใช้และรหัสผ่าน');
+                return;
+            }
+
+            currentUser = user;
+            sessionStartTime = Date.now();
+
+            // Save to localStorage as well for offline fallback
+            localStorage.setItem('minifarm_user', user);
+            document.getElementById('txt-username').innerText = user;
+            document.getElementById('auth-modal').style.display = 'none';
+
+            // Send Activity Log to Google Sheets
+            postToAppsScript({
+                action: isRegisterMode ? 'register' : 'login',
+                username: user,
+                password: pass,
+                timestamp: new Date().toISOString()
+            });
+
+            // Load saved state if exists
+            loadSavedGame(user);
+            initAudio();
+        }
+
+        function logoutUser() {
+            saveGame(true);
+            postToAppsScript({
+                action: 'logout',
+                username: currentUser,
+                playDurationSeconds: totalPlaySeconds,
+                timestamp: new Date().toISOString()
+            });
+            currentUser = null;
+            location.reload();
+        }
+
+        function saveGame(isManual = false) {
+            if (!currentUser) return;
+
+            const saveData = {
+                coins: state.coins,
+                water: state.water,
+                level: state.level,
+                exp: state.exp,
+                maxExp: state.maxExp,
+                unlockedMainPlots: state.unlockedMainPlots,
+                houseLevel: state.houseLevel,
+                hasDog: state.hasDog,
+                hasCat: state.hasCat,
+                inventory: state.inventory,
+                islands: {
+                    eastIsland: state.eastIsland.state,
+                    westIsland: state.westIsland.state,
+                    outerEastIsland: state.outerEastIsland.state,
+                    outerWestIsland: state.outerWestIsland.state
+                }
+            };
+
+            // Save locally
+            localStorage.setItem(`minifarm_save_${currentUser}`, JSON.stringify(saveData));
+
+            // Sync to Google Sheets via Apps Script
+            postToAppsScript({
+                action: 'saveGame',
+                username: currentUser,
+                saveData: saveData,
+                playDurationSeconds: totalPlaySeconds,
+                timestamp: new Date().toISOString()
+            });
+
+            if (isManual) {
+                const btn = document.querySelector('.btn-user-action');
+                if (btn) showFloatingText('💾 บันทึกสำเร็จ!', window.innerWidth / 2, window.innerHeight / 2, '#2ecc71');
+            }
+        }
+
+        function loadSavedGame(username) {
+            const raw = localStorage.getItem(`minifarm_save_${username}`);
+            if (raw) {
+                try {
+                    const data = JSON.parse(raw);
+                    state.coins = data.coins || 100;
+                    state.water = data.water || 100;
+                    state.level = data.level || 1;
+                    state.exp = data.exp || 0;
+                    state.maxExp = data.maxExp || 50;
+                    state.unlockedMainPlots = data.unlockedMainPlots || 6;
+                    state.houseLevel = data.houseLevel || 1;
+                    state.hasDog = data.hasDog || false;
+                    state.hasCat = data.hasCat || false;
+                    if (data.inventory) state.inventory = data.inventory;
+
+                    if (data.islands && plotsData.length > 0) {
+                        if (data.islands.eastIsland === 'unlocked' && state.eastIsland.plots) { state.eastIsland.state = 'unlocked'; state.eastIsland.plots.forEach(p => { p.unlocked = true; p.mesh.visible = true; }); }
+                        if (data.islands.westIsland === 'unlocked' && state.westIsland.plots) { state.westIsland.state = 'unlocked'; state.westIsland.plots.forEach(p => { p.unlocked = true; p.mesh.visible = true; }); }
+                        if (data.islands.outerEastIsland === 'unlocked' && state.outerEastIsland.plots) { state.outerEastIsland.state = 'unlocked'; state.outerEastIsland.plots.forEach(p => { p.unlocked = true; p.mesh.visible = true; }); }
+                        if (data.islands.outerWestIsland === 'unlocked' && state.outerWestIsland.plots) { state.outerWestIsland.state = 'unlocked'; state.outerWestIsland.plots.forEach(p => { p.unlocked = true; p.mesh.visible = true; }); }
+                    }
+
+                    // Unlock main island plots safely
+                    if (plotsData && plotsData.length > 0) {
+                        for (let i = 0; i < Math.min(state.unlockedMainPlots, plotsData.length); i++) {
+                            if (plotsData[i]) { plotsData[i].unlocked = true; plotsData[i].mesh.visible = true; }
+                        }
+                    }
+                    if (state.hasDog) createPetDog();
+                    if (state.hasCat) createPetCat();
+                    createHouseMesh(state.houseLevel);
+
+                    updateUI();
+                } catch(e){}
+            }
+        }
+
+        // Auto Save every 30 seconds & on Tab close (beforeunload)
+        setInterval(() => {
+            if (currentUser) saveGame(false);
+        }, 30000);
+
+        window.addEventListener('beforeunload', () => {
+            if (currentUser) {
+                saveGame(false);
+                postToAppsScript({
+                    action: 'logout',
+                    username: currentUser,
+                    playDurationSeconds: totalPlaySeconds,
+                    timestamp: new Date().toISOString()
+                });
+            }
+        });
+
+        // Session Time Counter
+        setInterval(() => {
+            if (currentUser) {
+                totalPlaySeconds++;
+                const mins = String(Math.floor(totalPlaySeconds / 60)).padStart(2, '0');
+                const secs = String(totalPlaySeconds % 60).padStart(2, '0');
+                document.getElementById('txt-session-time').innerText = `${mins}:${secs}`;
+            }
+        }, 1000);
+
+        /* =========================================================================
+           2. SOUND ENGINE (Tone.js Synthesizers)
+           ========================================================================= */
+        let audioInitialized = false;
+        let popSynth, chimeSynth, coinSynth, errorSynth, clickSynth, splashSynth;
+
+        function initAudio() {
+            if (audioInitialized) return;
+            Tone.start();
+
+            popSynth = new Tone.MembraneSynth({ pitchDecay: 0.05, octaves: 4, oscillator: { type: "sine" } }).toDestination();
+            chimeSynth = new Tone.PolySynth(Tone.Synth, { oscillator: { type: "triangle" } }).toDestination();
+            coinSynth = new Tone.Synth({ oscillator: { type: "sine" } }).toDestination();
+            errorSynth = new Tone.Synth({ oscillator: { type: "sawtooth" } }).toDestination();
+            clickSynth = new Tone.Synth({ oscillator: { type: "square" } }).toDestination();
+            splashSynth = new Tone.NoiseSynth({ noise: { type: 'pink' }, envelope: { attack: 0.01, decay: 0.2, sustain: 0 } }).toDestination();
+
+            audioInitialized = true;
+        }
+
+        function playSound(type) {
+            if (!audioInitialized) return;
+            try {
+                const now = Tone.now();
+                if (type === 'plant') popSynth.triggerAttackRelease("C4", "8n", now);
+                else if (type === 'harvest') chimeSynth.triggerAttackRelease(["C5", "E5", "G5", "C6"], "8n", now);
+                else if (type === 'sell') { coinSynth.triggerAttackRelease("B5", "16n", now); coinSynth.triggerAttackRelease("E6", "8n", now + 0.08); }
+                else if (type === 'correct') chimeSynth.triggerAttackRelease(["G4", "C5", "E5", "G5"], "8n", now);
+                else if (type === 'wrong') errorSynth.triggerAttackRelease("A2", "4n", now);
+                else if (type === 'click') clickSynth.triggerAttackRelease("C6", "32n", now);
+                else if (type === 'water') splashSynth.triggerAttackRelease("8n", now);
+                else if (type === 'levelup') chimeSynth.triggerAttackRelease(["C4", "E4", "G4", "C5", "E5", "G5", "C6"], "8n", now);
+            } catch(e){}
+        }
+
+        /* =========================================================================
+           3. GAME DATA & STATE (10 CROPS, LEVELS, PETS)
+           ========================================================================= */
+        const CROP_TYPES = {
+            tomato:     { name: 'มะเขือเทศ', icon: '🍅', cost: 10,    sell: 25,     growTime: 5,  exp: 10,  minLevel: 1 },
+            carrot:     { name: 'แครอท',   icon: '🥕', cost: 20,    sell: 60,     growTime: 8,  exp: 18,  minLevel: 1 },
+            cabbage:    { name: 'กะหล่ำปลี', icon: '🥬', cost: 50,    sell: 200,    growTime: 12, exp: 35,  minLevel: 1 },
+            corn:       { name: 'ข้าวโพด', icon: '🌽', cost: 100,   sell: 450,    growTime: 15, exp: 60,  minLevel: 5 },
+            strawberry: { name: 'สตอเบอรี่', icon: '🍓', cost: 250,   sell: 1200,   growTime: 20, exp: 120, minLevel: 5 },
+            pumpkin:    { name: 'ฟักทอง',   icon: '🎃', cost: 500,   sell: 2800,   growTime: 25, exp: 250, minLevel: 10 },
+            watermelon: { name: 'แตงโม',   icon: '🍉', cost: 1000,  sell: 6500,   growTime: 30, exp: 500, minLevel: 10 },
+            grape:      { name: 'องุ่น',     icon: '🍇', cost: 2500,  sell: 18000,  growTime: 35, exp: 1000,minLevel: 15 },
+            pineapple:  { name: 'สับปะรด', icon: '🍍', cost: 5000,  sell: 40000,  growTime: 40, exp: 2200,minLevel: 15 },
+            avocado:    { name: 'อะโวคาโด', icon: '🥑', cost: 10000, sell: 95000,  growTime: 45, exp: 5000,minLevel: 20 }
+        };
+
+        /* =========================================================================
+           4. THREE.JS SCENE SETUP
+           ========================================================================= */
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87ceeb);
+        scene.fog = new THREE.FogExp2(0x87ceeb, 0.008);
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 24, 30);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.outputEncoding = THREE.sRGBEncoding;
+        container.appendChild(renderer.domElement);
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true; controls.dampingFactor = 0.05;
+        controls.maxPolarAngle = Math.PI * 0.44; controls.minPolarAngle = Math.PI * 0.1;
+        controls.minDistance = 10; controls.maxDistance = 85;
+        controls.target.set(0, 1, 0);
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.65); scene.add(ambientLight);
+        const dirLight = new THREE.DirectionalLight(0xfffaed, 0.85);
+        dirLight.position.set(40, 50, 25); dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 2048; dirLight.shadow.mapSize.height = 2048;
+        const d = 50; dirLight.shadow.camera.left = -d; dirLight.shadow.camera.right = d;
+        dirLight.shadow.camera.top = d; dirLight.shadow.camera.bottom = -d;
+        scene.add(dirLight);
+
+        /* =========================================================================
+           5. 3D MODELS (ROBOT MOVED TO RIGHT SIDE: X = 6.5)
+           ========================================================================= */
+        let playerGroup, playerLeftLeg, playerRightLeg, playerLeftArm, playerRightArm;
+        let dogMesh, catMesh;
+        const animatedObjects = [];
+        let waterMesh, robotGroup, houseGroup, waterWellGroup;
+        let smokeParticles = [], waterParticles = [], sparkParticles = [];
+        let eastIslandGroup, westIslandGroup, outerEastGroup, outerWestGroup;
+
+        function createPlayer() {
+            playerGroup = new THREE.Group();
+            const skinMat = new THREE.MeshLambertMaterial({ color: 0xffdbac });
+            const shirtMat = new THREE.MeshLambertMaterial({ color: 0x27ae60 });
+            const pantsMat = new THREE.MeshLambertMaterial({ color: 0x2980b9 });
+            const hatMat = new THREE.MeshLambertMaterial({ color: 0xf39c12 });
+
+            const body = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.9, 0.4), shirtMat); body.position.y = 1.0; body.castShadow = true; playerGroup.add(body);
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.55, 0.55), skinMat); head.position.y = 1.7; head.castShadow = true; playerGroup.add(head);
+
+            const hatBrim = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 0.08, 12), hatMat); hatBrim.position.y = 2.0;
+            const hatTop = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.42, 0.35, 12), hatMat); hatTop.position.y = 2.2;
+            playerGroup.add(hatBrim, hatTop);
+
+            const legGeo = new THREE.BoxGeometry(0.26, 0.65, 0.26);
+            playerLeftLeg = new THREE.Mesh(legGeo, pantsMat); playerLeftLeg.position.set(-0.18, 0.32, 0); playerLeftLeg.castShadow = true;
+            playerRightLeg = new THREE.Mesh(legGeo, pantsMat); playerRightLeg.position.set(0.18, 0.32, 0); playerRightLeg.castShadow = true;
+            playerGroup.add(playerLeftLeg, playerRightLeg);
+
+            const armGeo = new THREE.BoxGeometry(0.22, 0.7, 0.22);
+            playerLeftArm = new THREE.Mesh(armGeo, shirtMat); playerLeftArm.position.set(-0.48, 1.0, 0);
+            playerRightArm = new THREE.Mesh(armGeo, shirtMat); playerRightArm.position.set(0.48, 1.0, 0);
+            playerGroup.add(playerLeftArm, playerRightArm);
+
+            playerGroup.position.set(0, 0, 5); scene.add(playerGroup);
+        }
+
+        function createPetDog() {
+            if (dogMesh) scene.remove(dogMesh);
+            dogMesh = new THREE.Group();
+            const brownMat = new THREE.MeshLambertMaterial({ color: 0xd35400 });
+            dogMesh.add(new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.4, 0.7), brownMat));
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.38, 0.4), brownMat); head.position.set(0, 0.3, 0.35); dogMesh.add(head);
+            dogMesh.position.set(2, 0, 4); scene.add(dogMesh);
+        }
+
+        function createPetCat() {
+            if (catMesh) scene.remove(catMesh);
+            catMesh = new THREE.Group();
+            const whiteMat = new THREE.MeshLambertMaterial({ color: 0xf5f6fa });
+            catMesh.add(new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.5), whiteMat));
+            const head = new THREE.Mesh(new THREE.SphereGeometry(0.25, 8, 8), whiteMat); head.position.set(0, 0.3, 0.25); catMesh.add(head);
+            catMesh.position.set(-2, 0, -4); scene.add(catMesh);
+        }
+
+        const keysPressed = {};
+        window.addEventListener('keydown', (e) => { keysPressed[e.code] = true; });
+        window.addEventListener('keyup', (e) => { keysPressed[e.code] = false; });
+
+        function updatePlayerMovement(delta, time) {
+            if (!playerGroup) return;
+
+            let moveX = 0, moveZ = 0;
+            if (keysPressed['KeyW'] || keysPressed['ArrowUp']) moveZ -= 1;
+            if (keysPressed['KeyS'] || keysPressed['ArrowDown']) moveZ += 1;
+            if (keysPressed['KeyA'] || keysPressed['ArrowLeft']) moveX -= 1;
+            if (keysPressed['KeyD'] || keysPressed['ArrowRight']) moveX += 1;
+
+            const isMoving = moveX !== 0 || moveZ !== 0;
+
+            if (isMoving) {
+                const moveAngle = Math.atan2(moveX, moveZ);
+                playerGroup.rotation.y = moveAngle;
+
+                const speed = 8.0;
+                const nextX = playerGroup.position.x + moveX * speed * delta;
+                const nextZ = playerGroup.position.z + moveZ * speed * delta;
+
+                let allowed = false;
+                const distCenter = Math.hypot(nextX, nextZ);
+
+                if (distCenter <= 14.2) allowed = true;
+                if (state.eastIsland.state === 'unlocked' && nextX >= 12 && nextX <= 31 && Math.abs(nextZ) <= 7.5) allowed = true;
+                if (state.outerEastIsland.state === 'unlocked' && nextX >= 31 && nextX <= 52 && Math.abs(nextZ) <= 7.5) allowed = true;
+                if (state.westIsland.state === 'unlocked' && nextX <= -12 && nextX >= -31 && Math.abs(nextZ) <= 7.5) allowed = true;
+                if (state.outerWestIsland.state === 'unlocked' && nextX <= -31 && nextX >= -52 && Math.abs(nextZ) <= 7.5) allowed = true;
+
+                if (allowed) {
+                    playerGroup.position.x = nextX;
+                    playerGroup.position.z = nextZ;
+                }
+
+                playerLeftLeg.rotation.x = Math.sin(time * 12) * 0.6;
+                playerRightLeg.rotation.x = -Math.sin(time * 12) * 0.6;
+                playerLeftArm.rotation.x = -Math.sin(time * 12) * 0.6;
+                playerRightArm.rotation.x = Math.sin(time * 12) * 0.6;
+            } else {
+                playerLeftLeg.rotation.x = 0; playerRightLeg.rotation.x = 0;
+                playerLeftArm.rotation.x = 0; playerRightArm.rotation.x = 0;
+            }
+
+            controls.target.lerp(new THREE.Vector3(playerGroup.position.x, 1.2, playerGroup.position.z), 0.08);
+
+            if (state.hasDog && dogMesh) {
+                const readyPlot = plotsData.find(p => p.unlocked && p.state === 'ready');
+                if (readyPlot) {
+                    const dx = readyPlot.x - dogMesh.position.x;
+                    const dz = readyPlot.z - dogMesh.position.z;
+                    const dist = Math.hypot(dx, dz);
+                    if (dist > 0.5) {
+                        dogMesh.position.x += (dx / dist) * 6.0 * delta;
+                        dogMesh.position.z += (dz / dist) * 6.0 * delta;
+                        dogMesh.rotation.y = Math.atan2(dx, dz);
+                    } else {
+                        harvestCrop(readyPlot, { clientX: window.innerWidth / 2, clientY: window.innerHeight / 2 });
+                    }
+                }
+            }
+        }
+
+        function createIslandMesh(radius, height, grassColor) {
+            const grp = new THREE.Group();
+            const grass = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius - 0.5, height, 28), new THREE.MeshLambertMaterial({ color: grassColor, flatShading: true }));
+            grass.position.y = -height / 2; grass.receiveShadow = true; grp.add(grass);
+            const sand = new THREE.Mesh(new THREE.CylinderGeometry(radius + 0.2, radius - 1.5, 1.2, 28), new THREE.MeshLambertMaterial({ color: 0xf6e58d, flatShading: true }));
+            sand.position.y = -height - 0.6; grp.add(sand);
+            const rock = new THREE.Mesh(new THREE.CylinderGeometry(radius - 1.5, 3, 6, 16), new THREE.MeshLambertMaterial({ color: 0x7f8c8d, flatShading: true }));
+            rock.position.y = -height - 4.0; grp.add(rock);
+            return grp;
+        }
+
+        function createEnvironment() {
+            scene.add(createIslandMesh(15, 3, 0x8be055));
+            eastIslandGroup = createIslandMesh(7.5, 2.5, 0xf1c40f); eastIslandGroup.position.set(24, 0, 0); scene.add(eastIslandGroup);
+            westIslandGroup = createIslandMesh(7.5, 2.5, 0x20b2aa); westIslandGroup.position.set(-24, 0, 0); scene.add(westIslandGroup);
+            outerEastGroup = createIslandMesh(7.5, 2.5, 0x8e44ad); outerEastGroup.position.set(44, 0, 0); scene.add(outerEastGroup);
+            outerWestGroup = createIslandMesh(7.5, 2.5, 0xd35400); outerWestGroup.position.set(-44, 0, 0); scene.add(outerWestGroup);
+
+            const waterGeo = new THREE.PlaneGeometry(300, 300, 32, 32);
+            waterMesh = new THREE.Mesh(waterGeo, new THREE.MeshPhongMaterial({ color: 0x48dbfb, transparent: true, opacity: 0.8, flatShading: true, shininess: 80 }));
+            waterMesh.rotation.x = -Math.PI / 2; waterMesh.position.y = -4.5; scene.add(waterMesh);
+        }
+
+        function buildWoodenBridge(startX, endX) {
+            const bridge = new THREE.Group();
+            const woodMat = new THREE.MeshLambertMaterial({ color: 0x8395a7 });
+            const width = 2.4; const length = Math.abs(endX - startX); const step = 0.8; const dir = endX > startX ? 1 : -1;
+            for (let i = 0; i <= length; i += step) {
+                const plank = new THREE.Mesh(new THREE.BoxGeometry(step * 0.85, 0.18, width), woodMat);
+                plank.position.set(startX + i * dir, 0.05, 0); plank.receiveShadow = true; bridge.add(plank);
+            }
+            scene.add(bridge); return bridge;
+        }
+
+        function animateWater(time) {
+            const pos = waterMesh.geometry.attributes.position;
+            for (let i = 0; i < pos.count; i++) {
+                pos.setZ(i, Math.sin(pos.getX(i) * 0.1 + time * 2) * 0.25 + Math.cos(pos.getY(i) * 0.1 + time * 1.5) * 0.25);
+            }
+            pos.needsUpdate = true;
+        }
+
+        function createTree() {
+            const treeGroup = new THREE.Group();
+            const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.45, 2.2, 8), new THREE.MeshLambertMaterial({ color: 0x795548 }));
+            trunk.position.y = 1.1; trunk.castShadow = true; treeGroup.add(trunk);
+            const folMat = new THREE.MeshLambertMaterial({ color: 0x10ac84, flatShading: true });
+            const cone1 = new THREE.Mesh(new THREE.ConeGeometry(1.6, 2.5, 8), folMat); cone1.position.y = 2.5; cone1.castShadow = true;
+            const cone2 = new THREE.Mesh(new THREE.ConeGeometry(1.2, 2.0, 8), folMat); cone2.position.y = 3.6; cone2.castShadow = true;
+            treeGroup.add(cone1, cone2); treeGroup.userData = { offset: Math.random() * 10 }; animatedObjects.push(treeGroup);
+            return treeGroup;
+        }
+
+        function populateProps() {
+            const positions = [{ x: -9, z: -7 }, { x: -11, z: 3 }, { x: 10, z: -8 }, { x: 7, z: 9 }, { x: -7, z: 9 }];
+            positions.forEach(p => { const tree = createTree(); tree.position.set(p.x, 0, p.z); scene.add(tree); });
+        }
+
+        function createHouseMesh(level) {
+            if (houseGroup) scene.remove(houseGroup);
+            houseGroup = new THREE.Group();
+            const wallMat = new THREE.MeshLambertMaterial({ color: level === 1 ? 0xf5f6fa : (level === 2 ? 0xdcdde1 : 0xffeae0), flatShading: true });
+            const roofMat = new THREE.MeshLambertMaterial({ color: level === 1 ? 0xff6b6b : (level === 2 ? 0x2e86de : 0x10ac84), flatShading: true });
+            const bodyW = level === 3 ? 4.2 : 3.4; const bodyH = level === 1 ? 2.6 : (level === 2 ? 3.5 : 4.0);
+
+            const body = new THREE.Mesh(new THREE.BoxGeometry(bodyW, bodyH, 3.2), wallMat); body.position.y = bodyH / 2; body.castShadow = true; houseGroup.add(body);
+            const roof = new THREE.Mesh(new THREE.ConeGeometry(bodyW * 0.85, 2.2, 4), roofMat); roof.position.y = bodyH + 1.1; roof.rotation.y = Math.PI / 4; houseGroup.add(roof);
+            const chim = new THREE.Mesh(new THREE.BoxGeometry(0.6, 1.8, 0.6), new THREE.MeshLambertMaterial({ color: 0x576574 }));
+            chim.position.set(-bodyW * 0.3, bodyH + 0.6, -0.6); houseGroup.add(chim);
+
+            houseGroup.position.set(0, 0, -8); scene.add(houseGroup);
+            houseGroup.userData.chimneyPos = new THREE.Vector3(-bodyW * 0.3, bodyH + 1.5, -8.6);
+        }
+
+        function emitSmokeParticle() {
+            if (!houseGroup || !houseGroup.userData.chimneyPos) return;
+            const p = new THREE.Mesh(new THREE.DodecahedronGeometry(0.25, 0), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.65 }));
+            const origin = houseGroup.userData.chimneyPos;
+            p.position.set(origin.x + (Math.random() - 0.5) * 0.2, origin.y, origin.z + (Math.random() - 0.5) * 0.2);
+            p.userData = { vy: 0.03 + Math.random() * 0.02, vx: (Math.random() - 0.5) * 0.01, life: 1.0 };
+            scene.add(p); smokeParticles.push(p);
+        }
+
+        function updateSmoke() {
+            for (let i = smokeParticles.length - 1; i >= 0; i--) {
+                const p = smokeParticles[i];
+                p.position.y += p.userData.vy; p.position.x += p.userData.vx;
+                p.scale.addScalar(0.015); p.userData.life -= 0.015;
+                p.material.opacity = p.userData.life * 0.6;
+                if (p.userData.life <= 0) { scene.remove(p); smokeParticles.splice(i, 1); }
+            }
+        }
+
+        // ROBOT REPOSITIONED TO RIGHT SIDE (X = 6.5, Z = 1.5)
+        function createWaterWellAndRobot() {
+            waterWellGroup = new THREE.Group();
+            const stoneWell = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.3, 1.1, 14), new THREE.MeshLambertMaterial({ color: 0x7f8c8d, flatShading: true }));
+            stoneWell.position.y = 0.55; stoneWell.castShadow = true; waterWellGroup.add(stoneWell);
+
+            const waterSurface = new THREE.Mesh(new THREE.CylinderGeometry(1.15, 1.15, 0.1, 14), new THREE.MeshPhongMaterial({ color: 0x0984e3, shininess: 90 }));
+            waterSurface.position.y = 0.95; waterWellGroup.add(waterSurface);
+
+            const woodMat = new THREE.MeshLambertMaterial({ color: 0x795548 });
+            const post1 = new THREE.Mesh(new THREE.BoxGeometry(0.16, 1.8, 0.16), woodMat); post1.position.set(-1.0, 1.4, 0);
+            const post2 = post1.clone(); post2.position.set(1.0, 1.4, 0);
+            const roof = new THREE.Mesh(new THREE.ConeGeometry(1.5, 0.9, 4), new THREE.MeshLambertMaterial({ color: 0xd63031, flatShading: true }));
+            roof.position.y = 2.4; roof.rotation.y = Math.PI / 4;
+            waterWellGroup.add(post1, post2, roof);
+
+            waterWellGroup.position.set(-6.5, 0, -2.0); scene.add(waterWellGroup);
+
+            // Robot 3D Mesh on the Right Side of plots!
+            robotGroup = new THREE.Group();
+            const bodyMat = new THREE.MeshLambertMaterial({ color: 0xc8d6e5, flatShading: true });
+            const blueMat = new THREE.MeshLambertMaterial({ color: 0x2e86de, flatShading: true });
+            const eyeMat = new THREE.MeshBasicMaterial({ color: 0xf1c40f });
+
+            robotGroup.add(new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 1.2, 12), bodyMat));
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.7, 0.7), bodyMat); head.position.y = 0.95; robotGroup.add(head);
+            const eye1 = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), eyeMat); eye1.position.set(-0.2, 1.0, 0.36);
+            const eye2 = eye1.clone(); eye2.position.set(0.2, 1.0, 0.36); robotGroup.add(eye1, eye2);
+            const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.4), blueMat); ant.position.y = 1.5; robotGroup.add(ant);
+
+            // MOVED TO RIGHT SIDE!
+            robotGroup.position.set(6.5, 0.6, 1.5); scene.add(robotGroup);
+        }
+
+        /* =========================================================================
+           6. MULTI-TIER FARM PLOTS & 10 CROP MODELS
+           ========================================================================= */
+        function createPlots() {
+            const mainCoords = [
+                { x: -3.2, z: 0.5 }, { x: 0, z: 0.5 }, { x: 3.2, z: 0.5 },
+                { x: -3.2, z: 3.7 }, { x: 0, z: 3.7 }, { x: 3.2, z: 3.7 },
+                { x: -1.6, z: -2.7 }, { x: 1.6, z: -2.7 }
+            ];
+            mainCoords.forEach((pos, idx) => {
+                const plot = createPlotMesh(pos.x, pos.z, 0x593d18, idx < 6);
+                plot.multiplier = 1.0; plotsData.push(plot);
+            });
+
+            const eastCoords = [{ x: 22, z: -1.8 }, { x: 26, z: -1.8 }, { x: 22, z: 1.8 }, { x: 26, z: 1.8 }];
+            eastCoords.forEach(pos => {
+                const plot = createPlotMesh(pos.x, pos.z, 0xb8860b, false);
+                plot.multiplier = 2.0; plotsData.push(plot); state.eastIsland.plots.push(plot);
+            });
+
+            const westCoords = [{ x: -22, z: -1.8 }, { x: -26, z: -1.8 }, { x: -22, z: 1.8 }, { x: -26, z: 1.8 }];
+            westCoords.forEach(pos => {
+                const plot = createPlotMesh(pos.x, pos.z, 0x008080, false);
+                plot.multiplier = 3.0; plotsData.push(plot); state.westIsland.plots.push(plot);
+            });
+
+            const outerEastCoords = [{ x: 42, z: -1.8 }, { x: 46, z: -1.8 }, { x: 42, z: 1.8 }, { x: 46, z: 1.8 }];
+            outerEastCoords.forEach(pos => {
+                const plot = createPlotMesh(pos.x, pos.z, 0x8e44ad, false);
+                plot.multiplier = 4.0; plotsData.push(plot); state.outerEastIsland.plots.push(plot);
+            });
+
+            const outerWestCoords = [{ x: -42, z: -1.8 }, { x: -46, z: -1.8 }, { x: -42, z: 1.8 }, { x: -46, z: 1.8 }];
+            outerWestCoords.forEach(pos => {
+                const plot = createPlotMesh(pos.x, pos.z, 0xd35400, false);
+                plot.multiplier = 5.0; plotsData.push(plot); state.outerWestIsland.plots.push(plot);
+            });
+        }
+
+        function createPlotMesh(x, z, soilColor, unlocked) {
+            const plotGroup = new THREE.Group();
+            const dirtMat = new THREE.MeshLambertMaterial({ color: soilColor });
+            const borderMat = new THREE.MeshLambertMaterial({ color: 0x3d2910 });
+
+            const dirt = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.2, 2.6), dirtMat); dirt.position.y = 0.1; dirt.receiveShadow = true; plotGroup.add(dirt);
+            const border = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.22, 2.8), borderMat); border.position.y = 0.08; border.receiveShadow = true; plotGroup.add(border);
+
+            plotGroup.position.set(x, 0, z); scene.add(plotGroup);
+
+            const barGroup = new THREE.Group();
+            const bgBar = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 0.25), new THREE.MeshBasicMaterial({ color: 0x2c3e50, side: THREE.DoubleSide }));
+            const fillBar = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 0.18), new THREE.MeshBasicMaterial({ color: 0x2ecc71, side: THREE.DoubleSide }));
+            fillBar.position.z = 0.01; barGroup.add(bgBar, fillBar);
+            barGroup.position.set(x, 2.5, z); barGroup.visible = false; scene.add(barGroup);
+
+            plotGroup.visible = unlocked;
+            return {
+                x, z, mesh: plotGroup, dirtMesh: dirt, unlocked,
+                state: 'empty', cropType: null, growProgress: 0, growDuration: 5,
+                cropMesh: null, progressBar: barGroup, fillBarMesh: fillBar
+            };
+        }
+
+        function createCropMesh(cropType) {
+            const cropGroup = new THREE.Group();
+            if (cropType === 'tomato') {
+                const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 0.8), new THREE.MeshLambertMaterial({ color: 0x2ecc71 })); stem.position.y = 0.4; cropGroup.add(stem);
+                const fruitMat = new THREE.MeshLambertMaterial({ color: 0xff3333, flatShading: true });
+                const t1 = new THREE.Mesh(new THREE.SphereGeometry(0.4, 8, 8), fruitMat); t1.position.set(-0.25, 0.6, 0.2);
+                const t2 = new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 8), fruitMat); t2.position.set(0.3, 0.5, -0.1); cropGroup.add(t1, t2);
+            } else if (cropType === 'carrot') {
+                const cone = new THREE.Mesh(new THREE.ConeGeometry(0.35, 1.2, 8), new THREE.MeshLambertMaterial({ color: 0xff8800, flatShading: true })); cone.rotation.x = Math.PI; cone.position.y = 0.5; cropGroup.add(cone);
+                const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.8, 6), new THREE.MeshLambertMaterial({ color: 0x27ae60 })); leaf.position.y = 1.3; cropGroup.add(leaf);
+            } else if (cropType === 'cabbage') {
+                const head = new THREE.Mesh(new THREE.IcosahedronGeometry(0.6, 1), new THREE.MeshLambertMaterial({ color: 0x55efc4, flatShading: true })); head.position.y = 0.5; cropGroup.add(head);
+            } else if (cropType === 'corn') {
+                const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.15, 1.6), new THREE.MeshLambertMaterial({ color: 0x2ecc71 })); stalk.position.y = 0.8; cropGroup.add(stalk);
+                const cobMat = new THREE.MeshLambertMaterial({ color: 0xf1c40f, flatShading: true });
+                const cob1 = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.18, 0.8, 8), cobMat); cob1.position.set(0.2, 1.0, 0); cob1.rotation.z = -0.3; cropGroup.add(cob1);
+            } else if (cropType === 'strawberry') {
+                const berryMat = new THREE.MeshLambertMaterial({ color: 0xe74c3c, flatShading: true });
+                for(let i=0; i<3; i++) {
+                    const berry = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.5, 6), berryMat);
+                    berry.rotation.x = Math.PI; berry.position.set((i-1)*0.35, 0.4 + (i%2)*0.15, (i%2)*0.2); cropGroup.add(berry);
+                }
+            } else if (cropType === 'pumpkin') {
+                const pumpMat = new THREE.MeshLambertMaterial({ color: 0xe67e22, flatShading: true });
+                const body = new THREE.Mesh(new THREE.SphereGeometry(0.7, 10, 8), pumpMat); body.scale.set(1.2, 0.8, 1.2); body.position.y = 0.55; cropGroup.add(body);
+            } else if (cropType === 'watermelon') {
+                const melMat = new THREE.MeshLambertMaterial({ color: 0x009432, flatShading: true });
+                const body = new THREE.Mesh(new THREE.SphereGeometry(0.75, 12, 10), melMat); body.scale.set(1.2, 0.95, 1.0); body.position.y = 0.65; cropGroup.add(body);
+            } else if (cropType === 'grape') {
+                const grapeMat = new THREE.MeshLambertMaterial({ color: 0x8e44ad, flatShading: true });
+                for(let i=0; i<6; i++) {
+                    const g = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 8), grapeMat);
+                    g.position.set((i%3 - 1)*0.25, 0.4 + Math.floor(i/3)*0.3, 0); cropGroup.add(g);
+                }
+            } else if (cropType === 'pineapple') {
+                const pineMat = new THREE.MeshLambertMaterial({ color: 0xf39c12, flatShading: true });
+                const body = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.45, 0.9, 8), pineMat); body.position.y = 0.55; cropGroup.add(body);
+                const crown = new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.6, 6), new THREE.MeshLambertMaterial({ color: 0x27ae60 })); crown.position.y = 1.2; cropGroup.add(crown);
+            } else if (cropType === 'avocado') {
+                const avoMat = new THREE.MeshLambertMaterial({ color: 0x1e824c, flatShading: true });
+                const body = new THREE.Mesh(new THREE.SphereGeometry(0.55, 8, 8), avoMat); body.scale.set(0.9, 1.3, 0.9); body.position.y = 0.65; cropGroup.add(body);
+            }
+            return cropGroup;
+        }
+
+        /* =========================================================================
+           7. GAME LOGIC & REFILL
+           ========================================================================= */
+        function addEXP(amount) {
+            state.exp += amount;
+            if (state.exp >= state.maxExp) {
+                state.exp -= state.maxExp;
+                state.level++;
+                state.maxExp = Math.floor(state.maxExp * 1.6);
+                playSound('levelup');
+                if (playerGroup) {
+                    const pos = project3DTo2D(playerGroup.position.clone().add(new THREE.Vector3(0, 2.2, 0)));
+                    showFloatingText(`⭐ LEVEL UP! เลเวล ${state.level}`, pos.x, pos.y, '#f1c40f');
+                }
+            }
+            updateUI();
+            renderSeedListUI();
+        }
+
+        function renderSeedListUI() {
+            const container = document.getElementById('content-seeds');
+            container.innerHTML = '';
+            for (let type in CROP_TYPES) {
+                const info = CROP_TYPES[type];
+                const isLocked = state.level < info.minLevel;
+                const card = document.createElement('div');
+                card.className = `seed-card ${state.selectedSeed === type ? 'selected' : ''} ${isLocked ? 'locked-item' : ''}`;
+                card.id = `seed-${type}`;
+                card.onclick = () => {
+                    if (isLocked) {
+                        playSound('wrong');
+                        alert(`ต้องใช้เลเวล ${info.minLevel} เพื่อปลดล็อคเมล็ด ${info.name}!`);
+                    } else {
+                        selectSeed(type);
+                    }
+                };
+                card.innerHTML = `
+                    <div class="item-left">
+                        <span class="item-name">${info.name} ${info.icon} ${isLocked ? '🔒 (เวล '+info.minLevel+')' : ''}</span>
+                        <span class="item-sub">ปลูก: -${info.cost.toLocaleString()} 🪙 | 10 💧 | +${info.exp} EXP</span>
+                    </div>
+                    <div class="item-right">
+                        <span class="item-sell">ขาย: +${info.sell.toLocaleString()} 🪙</span>
+                        <span class="item-time">⏱️ ${info.growTime} วิ</span>
+                    </div>
+                `;
+                container.appendChild(card);
+            }
+        }
+
+        function renderInventoryUI() {
+            const container = document.getElementById('inv-container');
+            container.innerHTML = '';
+            for (let type in CROP_TYPES) {
+                const info = CROP_TYPES[type];
+                const count = state.inventory[type] || 0;
+                container.innerHTML += `<div>${info.icon} ${info.name}: <strong>${count}</strong></div>`;
+            }
+        }
+
+        function updateUI() {
+            document.getElementById('txt-level').innerText = `เลเวล ${state.level}`;
+            document.getElementById('exp-bar-fill').style.width = `${(state.exp / state.maxExp) * 100}%`;
+
+            document.getElementById('txt-coins').innerText = `${state.coins.toLocaleString()} เหรียญ`;
+            document.getElementById('txt-water').innerText = `${state.water} / ${state.maxWater}`;
+            document.getElementById('water-bar-fill').style.width = `${(state.water / state.maxWater) * 100}%`;
+
+            const totalInv = Object.values(state.inventory).reduce((a, b) => a + b, 0);
+            document.getElementById('txt-storage').innerText = `${totalInv} ชิ้น`;
+            renderInventoryUI();
+            document.getElementById('btn-sell-all').disabled = totalInv === 0;
+
+            document.getElementById('txt-plot-count').innerText = `(${state.unlockedMainPlots}/8 ช่อง)`;
+            const btnPlot = document.getElementById('btn-expand-plot');
+            if (state.unlockedMainPlots >= 8) { btnPlot.innerText = 'สูงสุดแล้ว'; btnPlot.disabled = true; }
+
+            const btnHouse = document.getElementById('btn-upgrade-house');
+            const txtHouse = document.getElementById('txt-house-level');
+            if (state.houseLevel === 1) { txtHouse.innerText = 'ระดับ 1 -> 2'; btnHouse.innerText = '-300 🪙'; }
+            else if (state.houseLevel === 2) { txtHouse.innerText = 'ระดับ 2 -> 3'; btnHouse.innerText = '-800 🪙'; }
+            else { txtHouse.innerText = 'ระดับ 3 (สูงสุด)'; btnHouse.innerText = 'สูงสุดแล้ว'; btnHouse.disabled = true; }
+
+            updateIslandShopCard('eastIsland', 'btn-unlock-east', 'txt-req-east');
+            updateIslandShopCard('westIsland', 'btn-unlock-west', 'txt-req-west');
+            updateIslandShopCard('outerEastIsland', 'btn-unlock-outer-east', 'txt-req-outer-east');
+            updateIslandShopCard('outerWestIsland', 'btn-unlock-outer-west', 'txt-req-outer-west');
+
+            const btnDog = document.getElementById('btn-buy-dog');
+            if (state.hasDog) { btnDog.innerText = 'มีแล้ว 🐶'; btnDog.disabled = true; }
+
+            const btnCat = document.getElementById('btn-buy-cat');
+            if (state.hasCat) { btnCat.innerText = 'มีแล้ว 🐱'; btnCat.disabled = true; }
+
+            const robotBadge = document.getElementById('robot-badge');
+            if (state.robotBrokenTimer > 0) { robotBadge.className = 'game-badge broken'; robotBadge.innerText = `พัง! (${Math.ceil(state.robotBrokenTimer)}s)`; }
+            else if (state.waterBuffTimer > 0) { robotBadge.className = 'game-badge watering'; robotBadge.innerText = `รดน้ำ 💦 (${Math.ceil(state.waterBuffTimer)}s)`; }
+            else { robotBadge.className = 'game-badge'; robotBadge.innerText = 'QUIZ 🤖'; }
+
+            updateIslandBadge('east-island-badge', state.eastIsland, '🔓 ปลดล็อคเกาะตะวันออก (500 🪙)');
+            updateIslandBadge('west-island-badge', state.westIsland, '🔓 ปลดล็อคเกาะตะวันตก (1200 🪙)');
+
+            if (state.eastIsland.state === 'unlocked') updateIslandBadge('outer-east-badge', state.outerEastIsland, '🔓 ปลดล็อคเกาะอุลตร้าตะวันออกไกล (2500 🪙)');
+            else document.getElementById('outer-east-badge').style.display = 'none';
+
+            if (state.westIsland.state === 'unlocked') updateIslandBadge('outer-west-badge', state.outerWestIsland, '🔓 ปลดล็อคเกาะคอสโม่ตะวันตกไกล (5000 🪙)');
+            else document.getElementById('outer-west-badge').style.display = 'none';
+        }
+
+        function updateIslandShopCard(key, btnId, reqId) {
+            const isl = state[key];
+            const btn = document.getElementById(btnId);
+            const req = document.getElementById(reqId);
+            if (isl.state === 'unlocked') {
+                btn.innerText = 'ปลดแล้ว'; btn.disabled = true; req.innerText = 'ปลดล็อคแล้ว';
+            } else if (isl.state === 'unlocking') {
+                btn.innerText = 'กำลังสร้าง...'; btn.disabled = true; req.innerText = `⏳ (${Math.ceil(isl.timer)}s)`;
+            } else {
+                if (state.level < isl.minLevel) {
+                    btn.disabled = true; req.innerText = `🔒 ต้องเลเวล ${isl.minLevel}`;
+                } else {
+                    btn.disabled = false; req.innerText = `พร้อมปลดล็อค!`;
+                }
+            }
+        }
+
+        function updateIslandBadge(elementId, islandState, label) {
+            const badge = document.getElementById(elementId);
+            if (islandState.state === 'unlocked') badge.style.display = 'none';
+            else if (islandState.state === 'unlocking') {
+                badge.style.display = 'flex'; badge.className = 'game-badge island-unlocking';
+                badge.innerText = `⏳ กำลังปลดล็อค (${Math.ceil(islandState.timer)}s)`;
+            } else {
+                badge.style.display = state.level >= islandState.minLevel ? 'flex' : 'none';
+                badge.innerText = label;
+            }
+        }
+
+        function switchTab(tab) {
+            playSound('click');
+            document.getElementById('tab-seeds').classList.toggle('active', tab === 'seeds');
+            document.getElementById('tab-build').classList.toggle('active', tab === 'build');
+            document.getElementById('content-seeds').style.display = tab === 'seeds' ? 'flex' : 'none';
+            document.getElementById('content-build').style.display = tab === 'build' ? 'flex' : 'none';
+        }
+
+        function selectSeed(type) {
+            playSound('click'); state.selectedSeed = type;
+            renderSeedListUI();
+        }
+
+        function showFloatingText(text, screenX, screenY, color = '#f1c40f') {
+            const el = document.createElement('div');
+            el.className = 'float-text'; el.innerText = text;
+            el.style.left = `${screenX}px`; el.style.top = `${screenY}px`; el.style.color = color;
+            document.body.appendChild(el); setTimeout(() => el.remove(), 1200);
+        }
+
+        function plantCrop(plot, event) {
+            const cropInfo = CROP_TYPES[state.selectedSeed];
+            if (state.level < cropInfo.minLevel) {
+                playSound('wrong'); showFloatingText(`🔒 ต้องเลเวล ${cropInfo.minLevel}`, event.clientX, event.clientY, '#e74c3c');
+                return;
+            }
+            if (state.coins < cropInfo.cost) {
+                playSound('wrong'); showFloatingText('เงินไม่พอ! ❌', event.clientX, event.clientY, '#e74c3c');
+                return;
+            }
+            if (state.water < 10 && state.waterBuffTimer <= 0) {
+                playSound('wrong'); showFloatingText('💧 น้ำหมด! ตอบคำถามหุ่นยนต์เพื่อเติมน้ำ', event.clientX, event.clientY, '#3498db');
+                return;
+            }
+
+            state.coins -= cropInfo.cost;
+            if (state.waterBuffTimer <= 0) state.water -= 10;
+
+            plot.state = 'growing'; plot.cropType = state.selectedSeed;
+            plot.growProgress = 0; plot.growDuration = cropInfo.growTime;
+
+            const sprout = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.5, 6), new THREE.MeshLambertMaterial({ color: 0x2ecc71 }));
+            sprout.position.set(plot.x, 0.3, plot.z); sprout.scale.set(0.2, 0.2, 0.2);
+            scene.add(sprout); plot.cropMesh = sprout;
+
+            plot.progressBar.visible = true; plot.fillBarMesh.scale.set(0, 1, 1);
+            playSound('plant'); showFloatingText(`-${cropInfo.cost.toLocaleString()} 🪙`, event.clientX, event.clientY, '#e74c3c');
+            updateUI();
+        }
+
+        function harvestCrop(plot, event) {
+            const cropInfo = CROP_TYPES[plot.cropType];
+            state.inventory[plot.cropType]++;
+
+            if (plot.cropMesh) { scene.remove(plot.cropMesh); plot.cropMesh = null; }
+            plot.state = 'empty'; plot.progressBar.visible = false;
+
+            playSound('harvest');
+            addEXP(cropInfo.exp);
+
+            const multText = plot.multiplier > 1 ? ` (x${plot.multiplier}🔥)` : '';
+            showFloatingText(`+1 ${cropInfo.icon}${multText} (+${cropInfo.exp} EXP)`, event.clientX, event.clientY, '#2ecc71');
+            updateUI();
+        }
+
+        function sellAllCrops() {
+            let totalGain = 0;
+            for (let type in state.inventory) {
+                totalGain += state.inventory[type] * CROP_TYPES[type].sell;
+                state.inventory[type] = 0;
+            }
+            if (totalGain > 0) {
+                state.coins += totalGain; playSound('sell');
+                const btn = document.getElementById('btn-sell-all');
+                const rect = btn.getBoundingClientRect();
+                showFloatingText(`+${totalGain.toLocaleString()} 🪙`, rect.left + rect.width / 2, rect.top, '#f1c40f');
+                updateUI();
+            }
+        }
+
+        function buyPlotExpansion() {
+            if (state.unlockedMainPlots >= 8) return;
+            if (state.coins < 150) { playSound('wrong'); alert('เงินไม่พอ! ขยายแปลงผักใช้ 150 เหรียญ'); return; }
+            state.coins -= 150;
+            plotsData[state.unlockedMainPlots].unlocked = true;
+            plotsData[state.unlockedMainPlots].mesh.visible = true;
+            state.unlockedMainPlots++;
+            playSound('harvest'); updateUI();
+        }
+
+        function buyHouseUpgrade() {
+            const cost = state.houseLevel === 1 ? 300 : 800;
+            if (state.coins < cost) { playSound('wrong'); alert(`เงินไม่พอ! ต่อเติมบ้านใช้ ${cost} เหรียญ`); return; }
+            state.coins -= cost; state.houseLevel++;
+            createHouseMesh(state.houseLevel);
+            playSound('harvest'); updateUI();
+        }
+
+        function buyPet(type) {
+            if (type === 'dog' && !state.hasDog) {
+                if (state.coins < 800) { playSound('wrong'); alert('เงินไม่พอซื้อน้องหมา (800 เหรียญ)'); return; }
+                state.coins -= 800; state.hasDog = true; createPetDog(); playSound('harvest'); updateUI();
+            } else if (type === 'cat' && !state.hasCat) {
+                if (state.coins < 1500) { playSound('wrong'); alert('เงินไม่พอซื้อน้องแมว (1,500 เหรียญ)'); return; }
+                state.coins -= 1500; state.hasCat = true; createPetCat(); playSound('harvest'); updateUI();
+            }
+        }
+
+        function startUnlockIsland(key) {
+            const isl = state[key];
+            if (isl.state !== 'locked') return;
+            if (state.level < isl.minLevel) {
+                playSound('wrong'); alert(`ต้องใช้เลเวล ${isl.minLevel} เพื่อปลดล็อค${isl.name}!`); return;
+            }
+            if (state.coins < isl.cost) {
+                playSound('wrong'); alert(`เงินไม่พอปลดล็อค${isl.name} (${isl.cost.toLocaleString()} เหรียญ)`); return;
+            }
+            state.coins -= isl.cost; isl.state = 'unlocking'; isl.timer = isl.duration;
+            playSound('click'); updateUI();
+        }
+
+        /* =========================================================================
+           8. MATH QUIZ MINIGAME (EXCLUSIVE WATER REFILL)
+           ========================================================================= */
+        function openRobotQuiz() {
+            if (state.robotBrokenTimer > 0 || state.waterBuffTimer > 0) return;
+            playSound('click'); generateQuizQuestion();
+            document.getElementById('quiz-modal').style.display = 'flex';
+        }
+
+        function generateQuizQuestion() {
+            const ops = ['+', '-', '*']; const op = ops[Math.floor(Math.random() * ops.length)];
+            let n1, n2, ans;
+            if (op === '+') { n1 = Math.floor(Math.random() * 40) + 10; n2 = Math.floor(Math.random() * 40) + 10; ans = n1 + n2; }
+            else if (op === '-') { n1 = Math.floor(Math.random() * 50) + 20; n2 = Math.floor(Math.random() * n1); ans = n1 - n2; }
+            else { n1 = Math.floor(Math.random() * 9) + 2; n2 = Math.floor(Math.random() * 9) + 2; ans = n1 * n2; }
+
+            document.getElementById('quiz-q').innerText = `${n1} ${op === '*' ? '×' : op} ${n2} = ?`;
+            const opts = [ans];
+            while (opts.length < 4) {
+                const w = ans + (Math.floor(Math.random() * 12) - 6);
+                if (w !== ans && w >= 0 && !opts.includes(w)) opts.push(w);
+            }
+            opts.sort(() => Math.random() - 0.5);
+            state.currentQuizAnswer = ans;
+
+            const containerOpts = document.getElementById('quiz-opts'); containerOpts.innerHTML = '';
+            opts.forEach(val => {
+                const btn = document.createElement('button'); btn.className = 'btn-opt'; btn.innerText = val;
+                btn.onclick = () => answerQuiz(val); containerOpts.appendChild(btn);
+            });
+        }
+
+        function answerQuiz(val) {
+            closeQuiz();
+            if (val === state.currentQuizAnswer) {
+                playSound('correct');
+                state.waterBuffTimer = 10;
+                state.water = state.maxWater; // EXCLUSIVE WATER REFILL
+                addEXP(50);
+                showFloatingText('ตอบถูก! น้ำเต็มถัง 100/100 💧 + บัฟโตไว 1.5x!', window.innerWidth / 2, window.innerHeight / 2, '#2ecc71');
+            } else {
+                playSound('wrong'); state.robotBrokenTimer = 10;
+                showFloatingText('ตอบผิด! หุ่นยนต์พัง 💥', window.innerWidth / 2, window.innerHeight / 2, '#e74c3c');
+            }
+            updateUI();
+        }
+
+        function closeQuiz() { document.getElementById('quiz-modal').style.display = 'none'; }
+
+        /* =========================================================================
+           9. RAYCASTING & CLICKS
+           ========================================================================= */
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        window.addEventListener('pointerdown', (e) => {
+            if (e.target.closest('.interactive') || e.target.closest('#quiz-modal') || e.target.closest('#auth-modal') || e.target.closest('.game-badge')) return;
+
+            mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+
+            if (robotGroup && raycaster.intersectObjects(robotGroup.children, true).length > 0) {
+                openRobotQuiz(); return;
+            }
+
+            const activePlotMeshes = plotsData.filter(p => p.unlocked).map(p => p.dirtMesh);
+            const hits = raycaster.intersectObjects(activePlotMeshes);
+            if (hits.length > 0) {
+                const plot = plotsData.find(p => p.dirtMesh === hits[0].object);
+                if (plot) {
+                    if (plot.state === 'empty') plantCrop(plot, e);
+                    else if (plot.state === 'ready') harvestCrop(plot, e);
+                }
+            }
+        });
+
+        /* =========================================================================
+           10. GAME LOOP & ANIMATION (WITH DAY/NIGHT CYCLE)
+           ========================================================================= */
+        const clock = new THREE.Clock();
+        let smokeEmitTimer = 0;
+
+        function project3DTo2D(pos3D) {
+            const tempV = pos3D.clone(); tempV.project(camera);
+            return { x: (tempV.x * .5 + .5) * window.innerWidth, y: (-(tempV.y * .5) + .5) * window.innerHeight };
+        }
+
+        function updateBadgesPositions() {
+            if (robotGroup) {
+                const pos = project3DTo2D(robotGroup.position.clone().add(new THREE.Vector3(0, 2.8, 0)));
+                const b = document.getElementById('robot-badge');
+                if (b) { b.style.left = `${pos.x}px`; b.style.top = `${pos.y}px`; }
+            }
+            if (eastIslandGroup) {
+                const pos = project3DTo2D(eastIslandGroup.position.clone().add(new THREE.Vector3(0, 2.5, 0)));
+                const b = document.getElementById('east-island-badge');
+                if (b) { b.style.left = `${pos.x}px`; b.style.top = `${pos.y}px`; }
+            }
+            if (westIslandGroup) {
+                const pos = project3DTo2D(westIslandGroup.position.clone().add(new THREE.Vector3(0, 2.5, 0)));
+                const b = document.getElementById('west-island-badge');
+                if (b) { b.style.left = `${pos.x}px`; b.style.top = `${pos.y}px`; }
+            }
+            if (outerEastGroup) {
+                const pos = project3DTo2D(outerEastGroup.position.clone().add(new THREE.Vector3(0, 2.5, 0)));
+                const b = document.getElementById('outer-east-badge');
+                if (b) { b.style.left = `${pos.x}px`; b.style.top = `${pos.y}px`; }
+            }
+            if (outerWestGroup) {
+                const pos = project3DTo2D(outerWestGroup.position.clone().add(new THREE.Vector3(0, 2.5, 0)));
+                const b = document.getElementById('outer-west-badge');
+                if (b) { b.style.left = `${pos.x}px`; b.style.top = `${pos.y}px`; }
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            try {
+                const delta = clock.getDelta(); const time = clock.getElapsedTime();
+
+                const dayFactor = (Math.sin(time * 0.1) + 1) / 2;
+                const dayColor = new THREE.Color(0x87ceeb);
+                const nightColor = new THREE.Color(0x0f172a);
+                scene.background.lerpColors(nightColor, dayColor, dayFactor);
+                scene.fog.color.copy(scene.background);
+                dirLight.intensity = 0.2 + dayFactor * 0.7;
+
+                const timeBadge = document.getElementById('time-badge');
+                if (timeBadge) {
+                    if (dayFactor > 0.6) { timeBadge.innerText = '☀️ กลางวัน'; timeBadge.style.color = '#f39c12'; }
+                    else if (dayFactor > 0.3) { timeBadge.innerText = '🌅 เย็น'; timeBadge.style.color = '#e67e22'; }
+                    else { timeBadge.innerText = '🌙 กลางคืน'; timeBadge.style.color = '#9b59b6'; }
+                }
+
+                if (state.hasCat) {
+                    state.catTimer += delta;
+                    if (state.catTimer >= 10) {
+                        state.catTimer = 0; state.coins += 100; playSound('sell');
+                        if (catMesh) {
+                            const pos = project3DTo2D(catMesh.position.clone().add(new THREE.Vector3(0, 1.0, 0)));
+                            showFloatingText('+100 🪙 (แมวกวัก)', pos.x, pos.y, '#f1c40f');
+                        }
+                        updateUI();
+                    }
+                }
+
+                updatePlayerMovement(delta, time);
+                controls.update();
+
+                animateWater(time);
+                animatedObjects.forEach(obj => { obj.rotation.z = Math.sin(time * 2 + obj.userData.offset) * 0.04; });
+
+                smokeEmitTimer += delta;
+                if (smokeEmitTimer > 0.3) { emitSmokeParticle(); smokeEmitTimer = 0; }
+                updateSmoke();
+
+                const islandConfig = [
+                    { key: 'eastIsland', startX: 12, endX: 18 },
+                    { key: 'westIsland', startX: -12, endX: -18 },
+                    { key: 'outerEastIsland', startX: 30, endX: 38 },
+                    { key: 'outerWestIsland', startX: -30, endX: -38 }
+                ];
+
+                islandConfig.forEach(cfg => {
+                    const isl = state[cfg.key];
+                    if (isl.state === 'unlocking') {
+                        isl.timer -= delta;
+                        if (isl.timer <= 0) {
+                            isl.state = 'unlocked';
+                            buildWoodenBridge(cfg.startX, cfg.endX);
+                            isl.plots.forEach(p => { p.unlocked = true; p.mesh.visible = true; });
+                            playSound('harvest');
+                        }
+                        updateUI();
+                    }
+                });
+
+                if (state.waterBuffTimer > 0) { state.waterBuffTimer -= delta; if (state.waterBuffTimer <= 0) updateUI(); }
+                if (state.robotBrokenTimer > 0) { state.robotBrokenTimer -= delta; if (state.robotBrokenTimer <= 0) updateUI(); }
+
+                const speedMultiplier = state.waterBuffTimer > 0 ? 1.5 : 1.0;
+                plotsData.forEach(plot => {
+                    if (plot.state === 'growing') {
+                        plot.growProgress += delta * speedMultiplier;
+                        const pct = Math.min(plot.growProgress / plot.growDuration, 1.0);
+
+                        plot.fillBarMesh.scale.x = pct;
+                        plot.fillBarMesh.position.x = (pct - 1) * 0.95;
+                        plot.progressBar.quaternion.copy(camera.quaternion);
+
+                        if (plot.cropMesh) {
+                            const s = 0.2 + pct * 0.8;
+                            plot.cropMesh.scale.set(s, s, s);
+                        }
+
+                        if (pct >= 1.0) {
+                            plot.state = 'ready';
+                            plot.progressBar.visible = false;
+
+                            if (plot.cropMesh) scene.remove(plot.cropMesh);
+                            const matureMesh = createCropMesh(plot.cropType);
+                            matureMesh.position.set(plot.x, 0.1, plot.z);
+                            scene.add(matureMesh); plot.cropMesh = matureMesh;
+                        }
+                    }
+                });
+
+                updateBadgesPositions();
+                renderer.render(scene, camera);
+            } catch(e) {
+                console.error("3D Loop Error:", e);
+                renderer.render(scene, camera);
+            }
+        }
+
+        /* =========================================================================
+           11. INIT
+           ========================================================================= */
+        function init() {
+            createEnvironment();
+            populateProps();
+            createHouseMesh(1);
+            createWaterWellAndRobot();
+            createPlayer();
+            createPlots();
+            renderSeedListUI();
+            updateUI();
+
+            // Auto Check for cached user session
+            const savedUser = localStorage.getItem('minifarm_user');
+            if (savedUser) {
+                currentUser = savedUser;
+                document.getElementById('txt-username').innerText = savedUser;
+                document.getElementById('auth-modal').style.display = 'none';
+                loadSavedGame(savedUser);
+            }
+
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+
+            animate();
+        }
+
+        init();
+    </script>
+</body>
+</html>
